@@ -4,6 +4,9 @@ config.json
 # local db
 db
 
+# macos
+.DS_Store
+
 # Logs
 logs
 *.log
