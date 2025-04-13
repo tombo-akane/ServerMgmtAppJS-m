@@ -308,7 +308,7 @@ module.exports = {
 				`- Slack名: ${slackName}\n` +
 				`- コース: ${course}\n` +
 				`- 所属期: ${generation}\n` +
-				`${snsShareLink}\n\n` +
+				`${snsShareLink}\n` +
 				`ひとこと:\n${message}`;
 			
 			let oldMessageId = null;
