@@ -1,8 +1,9 @@
 const testFile = require('./commands/test.js');
 const selfFile = require('./commands/self.js');
+const snsFile = require('./commands/sns.js');
 
 const { Client, Events, GatewayIntentBits, MessageFlags } = require('discord.js');
-const { token, selfIntroductionChannelId } = require('./config.json');
+const { token, selfIntroductionChannelId, snsShareChannelId } = require('./config.json');
 const { exec } = require('child_process');
 const client = new Client({ 
     intents: [
@@ -104,8 +105,95 @@ const commands = {
   'self-edit': {
     ...selfFile,
     execute: selfFile.editExecute
+  },
+  // sns共有コマンドを追加
+  [snsFile.data.name]: snsFile,
+  // sns-editコマンドを追加
+  'sns-edit': {
+    ...snsFile,
+    execute: snsFile.editExecute
   }
 };
+
+// SNS共有チャネルの案内メッセージ
+const SNS_GUIDE_MESSAGE = '/sns コマンドでSNSのリンクを共有できます。\n投稿したSNSリンクを編集したいときは、/sns-edit コマンドで編集できます。';
+// SNS共有チャネルのガイドメッセージID
+let snsGuideMessageId = null;
+// SNS共有チャネルのメッセージ更新時間
+let lastSnsGuideUpdateTime = 0;
+
+/**
+ * 既存のSNS共有案内メッセージを検索する関数
+ */
+async function findExistingSnsGuideMessage() {
+  try {
+    const channel = await client.channels.fetch(snsShareChannelId);
+    if (!channel) {
+      console.error(`Channel with ID ${snsShareChannelId} not found.`);
+      return null;
+    }
+
+    // チャンネルの最新100件のメッセージを取得
+    const messages = await channel.messages.fetch({ limit: 100 });
+    
+    // ボット自身のメッセージで、案内メッセージの内容と一致するものを探す
+    const guideMessage = messages.find(msg => 
+      msg.author.id === client.user.id && 
+      msg.content === SNS_GUIDE_MESSAGE
+    );
+
+    if (guideMessage) {
+      console.log(`Found existing SNS guide message with ID: ${guideMessage.id}`);
+      return guideMessage.id;
+    }
+    
+    return null;
+  } catch (error) {
+    console.error('Error finding existing SNS guide message:', error);
+    return null;
+  }
+}
+
+/**
+ * SNS共有チャンネルに案内メッセージを投稿する関数
+ */
+async function postSnsGuideMessage(force = false) {
+  try {
+    // 前回の更新から一定時間経っていない場合は更新しない（force=trueの場合を除く）
+    const now = Date.now();
+    if (!force && (now - lastSnsGuideUpdateTime < UPDATE_INTERVAL)) {
+      console.log(`SNS guide message update skipped - too soon since last update (${now - lastSnsGuideUpdateTime}ms)`);
+      return;
+    }
+
+    const channel = await client.channels.fetch(snsShareChannelId);
+    if (!channel) {
+      console.error(`Channel with ID ${snsShareChannelId} not found.`);
+      return;
+    }
+
+    // 以前の案内メッセージがあれば削除
+    if (snsGuideMessageId) {
+      try {
+        const oldMessage = await channel.messages.fetch(snsGuideMessageId);
+        if (oldMessage) {
+          await oldMessage.delete();
+        }
+      } catch (error) {
+        console.error('Error deleting old SNS guide message:', error);
+        // エラーが出ても続行
+      }
+    }
+
+    // 新しい案内メッセージを投稿
+    const newGuideMessage = await channel.send(SNS_GUIDE_MESSAGE);
+    snsGuideMessageId = newGuideMessage.id;
+    lastSnsGuideUpdateTime = Date.now();
+    console.log(`SNS guide message posted with ID: ${snsGuideMessageId}`);
+  } catch (error) {
+    console.error('Error posting SNS guide message:', error);
+  }
+}
 
 client.once(Events.ClientReady, async c => {
   console.log(`Login successful. username: ${c.user.tag}`);
@@ -121,6 +209,19 @@ client.once(Events.ClientReady, async c => {
   } else {
     // 見つからなかった場合は新規投稿
     await postGuideMessage(true);
+  }
+  
+  // SNS共有チャンネルの案内メッセージを検索
+  const existingSnsMessageId = await findExistingSnsGuideMessage();
+  
+  if (existingSnsMessageId) {
+    // 既存のメッセージを見つけた場合、それを使用
+    snsGuideMessageId = existingSnsMessageId;
+    lastSnsGuideUpdateTime = Date.now();
+    console.log(`Using existing SNS guide message with ID: ${snsGuideMessageId}`);
+  } else {
+    // 見つからなかった場合は新規投稿
+    await postSnsGuideMessage(true);
   }
 });
 
@@ -143,6 +244,22 @@ client.on(Events.MessageCreate, async message => {
       // 一般ユーザーからの通常メッセージの場合は案内メッセージを更新
       setTimeout(() => {
         postGuideMessage();
+      }, 500);
+    }
+  }
+  // SNS共有チャンネルでのメッセージ処理
+  else if (message.channelId === snsShareChannelId) {
+    if (message.webhookId) {
+      // Webhookからのメッセージ（SNS共有の投稿・編集）の場合は案内メッセージを更新
+      setTimeout(() => {
+        postSnsGuideMessage();
+      }, 500); // 少し待ってから更新
+    }
+    // 通常のユーザーメッセージでEphemeral（一時的な）メッセージでない場合のみ処理
+    else if (!message.flags.has(MessageFlags.Ephemeral)) {
+      // 一般ユーザーからの通常メッセージの場合は案内メッセージを更新
+      setTimeout(() => {
+        postSnsGuideMessage();
       }, 500);
     }
   }

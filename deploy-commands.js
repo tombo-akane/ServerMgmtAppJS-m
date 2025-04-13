@@ -3,11 +3,14 @@ const { applicationId, guildId, token } = require('./config.json');
 
 const testFile = require('./commands/test.js');
 const selfFile = require('./commands/self.js');
+const snsFile = require('./commands/sns.js');
 
 const commands = [
   testFile.data.toJSON(),
   selfFile.data.toJSON(),
-  selfFile.editData.toJSON()
+  selfFile.editData.toJSON(),
+  snsFile.data.toJSON(),
+  snsFile.editData.toJSON()
 ];
 
 const rest = new REST({ version: '10' }).setToken(token);
