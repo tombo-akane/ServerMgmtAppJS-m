@@ -2,13 +2,13 @@ const { SlashCommandBuilder, ModalBuilder, TextInputBuilder, TextInputStyle, Act
 const fs = require('fs');
 const path = require('path');
 const crypto = require('crypto'); // 一意のIDを生成するために追加
-const { selfIntroductionChannelId } = require('../config.json');
+const { selfIntroductionChannelId, snsShareChannelId } = require('../config.json');
 
 // 一時データ用のディレクトリパス
 const TEMP_DIR = path.join(__dirname, '..', 'db', 'temp');
 
-// 有効なコースリスト（バリデーション用）
-const VALID_COURSES = ['週1', '週3', '週5', '個別（基礎学力）', '個別（総合進学）'];
+// コース選択肢の例（バリデーション用ではなく、誘導用）
+const COURSE_EXAMPLES = ['週1', '週3', '週5', '個別', '卒業生', 'ネット'];
 
 // 一時データの保存・取得・削除を行うヘルパー関数
 const tempDataHelper = {
@@ -114,12 +114,12 @@ module.exports = {
 			.setStyle(TextInputStyle.Short)
 			.setRequired(true);
 			
-		// コース入力フィールドを追加
+		// コース入力フィールドを追加（バリデーションなしの自由記述）
 		const courseInput = new TextInputBuilder()
 			.setCustomId('courseInput')
-			.setLabel('コース（週1、週3、週5、個別（基礎学力）、個別（総合進学））')
+			.setLabel('コース（週1、週3、週5、個別、卒業生、ネットなど）')
 			.setStyle(TextInputStyle.Short)
-			.setPlaceholder('有効なコース名を入力してください')
+			.setPlaceholder('ご自身の所属するコースを入力してください')
 			.setRequired(true);
 		
 		const generationInput = new TextInputBuilder()
@@ -204,10 +204,10 @@ module.exports = {
       // コース入力フィールド（既存のコースをセット）
       const courseInput = new TextInputBuilder()
         .setCustomId('courseInput')
-        .setLabel('コース（週1、週3、週5、個別（基礎学力）、個別（総合進学））')
+        .setLabel('コース（週1、週3、週5、個別、卒業生、ネットなど）')
         .setStyle(TextInputStyle.Short)
         .setValue(userData.course || '')
-        .setPlaceholder('有効なコース名を入力してください')
+        .setPlaceholder('ご自身の所属するコースを入力してください')
         .setRequired(true);
       
       const generationInput = new TextInputBuilder()
@@ -271,13 +271,7 @@ module.exports = {
 			});
 		}
 		
-		// コースの検証
-		if (!VALID_COURSES.includes(course)) {
-			return await interaction.reply({
-				content: `無効なコースです。以下のコースから選択してください：${VALID_COURSES.join('、')}`,
-				ephemeral: true
-			});
-		}
+		// コースのバリデーションを削除
 		
 		// ユーザーデータのパスを設定
 		const dbDir = path.join(__dirname, '..', 'db', 'self_introduction');
@@ -292,12 +286,29 @@ module.exports = {
 		await interaction.deferReply({ ephemeral: true });
 		
 		try {
+			// SNSシェア情報の確認
+			let snsShareLink = '';
+			const snsShareDir = path.join(__dirname, '..', 'db', 'sns_share');
+			const snsSharePath = path.join(snsShareDir, `${userId}.json`);
+			
+			if (fs.existsSync(snsSharePath)) {
+				try {
+					const snsShareData = JSON.parse(fs.readFileSync(snsSharePath, 'utf8'));
+					if (snsShareData.messageId) {
+						snsShareLink = `- SNSシェア: https://discord.com/channels/${interaction.guildId}/${snsShareChannelId}/${snsShareData.messageId}\n`;
+					}
+				} catch (error) {
+					console.error(`Error reading SNS share data for ${userId}:`, error);
+				}
+			}
+			
 			// 整形されたメッセージテキストを作成（改行で区切る）
 			const formattedMessage = `<@${interaction.user.id}>\n` +
 				`- 名前: ${name}\n` +
 				`- Slack名: ${slackName}\n` +
 				`- コース: ${course}\n` +
-				`- 所属期: ${generation}\n\n` +
+				`- 所属期: ${generation}\n` +
+				`${snsShareLink}\n\n` +
 				`ひとこと:\n${message}`;
 			
 			let oldMessageId = null;
