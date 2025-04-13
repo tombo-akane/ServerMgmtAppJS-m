@@ -1,6 +1,9 @@
 # app id, guild id, and token
 config.json
 
+# local db
+db
+
 # Logs
 logs
 *.log
