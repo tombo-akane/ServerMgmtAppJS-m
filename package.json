@@ -15,5 +15,8 @@
   "bugs": {
     "url": "https://github.com/tombo-akane/ServerMgmtAppJS-m/issues"
   },
-  "homepage": "https://github.com/tombo-akane/ServerMgmtAppJS-m#readme"
+  "homepage": "https://github.com/tombo-akane/ServerMgmtAppJS-m#readme",
+  "dependencies": {
+    "discord.js": "^14.18.0"
+  }
 }
