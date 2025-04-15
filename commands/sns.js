@@ -1,4 +1,4 @@
-const { SlashCommandBuilder, ModalBuilder, TextInputBuilder, TextInputStyle, ActionRowBuilder } = require('discord.js');
+const { SlashCommandBuilder, ModalBuilder, TextInputBuilder, TextInputStyle, ActionRowBuilder, ButtonBuilder, ButtonStyle } = require('discord.js');
 const fs = require('fs');
 const path = require('path');
 const crypto = require('crypto');
@@ -120,6 +120,129 @@ module.exports = {
   data: new SlashCommandBuilder()
     .setName('sns')
     .setDescription('SNSのリンクを共有します'),
+  
+  // SNS共有ボタンを作成する関数
+  createSnsButton: function() {
+    return new ButtonBuilder()
+      .setCustomId('sns_share_button')
+      .setLabel('SNSリンクを追加/編集する')
+      .setStyle(ButtonStyle.Primary);
+  },
+  
+  // ボタンコンポーネントの行を作成する関数
+  createSnsButtonRow: function() {
+    const buttonRow = new ActionRowBuilder()
+      .addComponents(this.createSnsButton());
+    return buttonRow;
+  },
+  
+  // ボタンイベントを処理するハンドラ
+  handleButton: async function(interaction) {
+    if (interaction.customId !== 'sns_share_button') {
+      return false; // このボタンは処理しない
+    }
+    
+    // 特定チャンネルでのみ実行可能にする
+    if (interaction.channelId !== snsShareChannelId) {
+      return await interaction.reply({ 
+        content: 'SNS共有は <#' + snsShareChannelId + '> チャンネルでのみ使用できます。', 
+        ephemeral: true 
+      });
+    }
+    
+    const userId = interaction.user.id;
+    const selfIntroDir = path.join(__dirname, '..', 'db', 'self_introduction');
+    const userDataPath = path.join(selfIntroDir, `${userId}.json`);
+    
+    // 自己紹介データがあるか確認
+    if (!fs.existsSync(userDataPath)) {
+      return await interaction.reply({
+        content: '先に <#' + selfIntroductionChannelId + '> で自己紹介をしてください！',
+        ephemeral: true
+      });
+    }
+    
+    // SNSデータのパスを設定
+    const snsDbDir = path.join(__dirname, '..', 'db', 'sns_share');
+    const snsUserDataPath = path.join(snsDbDir, `${userId}.json`);
+    
+    // 既存のSNS共有データがあるか確認
+    const isEdit = fs.existsSync(snsUserDataPath);
+    let existingData = {};
+    
+    // Modalを作成
+    const modal = new ModalBuilder()
+      .setCustomId(isEdit ? 'snsEditModal' : 'snsShareModal')
+      .setTitle(isEdit ? 'SNS共有編集フォーム' : 'SNS共有フォーム');
+      
+    // フォームの各入力フィールドを作成
+    const snsInput1 = new TextInputBuilder()
+      .setCustomId('snsInput1')
+      .setLabel('SNS URL 1 (必須)')
+      .setStyle(TextInputStyle.Short)
+      .setPlaceholder('https://twitter.com/username など')
+      .setRequired(true);
+      
+    const snsInput2 = new TextInputBuilder()
+      .setCustomId('snsInput2')
+      .setLabel('SNS URL 2 (任意)')
+      .setStyle(TextInputStyle.Short)
+      .setPlaceholder('https://instagram.com/username など')
+      .setRequired(false);
+      
+    const snsInput3 = new TextInputBuilder()
+      .setCustomId('snsInput3')
+      .setLabel('SNS URL 3 (任意)')
+      .setStyle(TextInputStyle.Short)
+      .setPlaceholder('https://tiktok.com/@username など')
+      .setRequired(false);
+    
+    const snsInput4 = new TextInputBuilder()
+      .setCustomId('snsInput4')
+      .setLabel('SNS URL 4 (任意)')
+      .setStyle(TextInputStyle.Short)
+      .setPlaceholder('https://youtube.com/channel/xxxx など')
+      .setRequired(false);
+      
+    const snsInput5 = new TextInputBuilder()
+      .setCustomId('snsInput5')
+      .setLabel('SNS URL 5 (任意)')
+      .setStyle(TextInputStyle.Short)
+      .setPlaceholder('https://github.com/username など')
+      .setRequired(false);
+    
+    // 既存のデータがあれば読み込み
+    if (isEdit) {
+      try {
+        existingData = JSON.parse(fs.readFileSync(snsUserDataPath, 'utf8'));
+        
+        // 既存のデータを使ってフォームを事前入力
+        if (existingData.snsUrls && existingData.snsUrls.length > 0) {
+          if (existingData.snsUrls[0]) snsInput1.setValue(existingData.snsUrls[0]);
+          if (existingData.snsUrls[1]) snsInput2.setValue(existingData.snsUrls[1]);
+          if (existingData.snsUrls[2]) snsInput3.setValue(existingData.snsUrls[2]);
+          if (existingData.snsUrls[3]) snsInput4.setValue(existingData.snsUrls[3]);
+          if (existingData.snsUrls[4]) snsInput5.setValue(existingData.snsUrls[4]);
+        }
+      } catch (error) {
+        console.error(`Error reading SNS data for ${userId}:`, error);
+      }
+    }
+      
+    // 各フィールドをActionRowに配置
+    const row1 = new ActionRowBuilder().addComponents(snsInput1);
+    const row2 = new ActionRowBuilder().addComponents(snsInput2);
+    const row3 = new ActionRowBuilder().addComponents(snsInput3);
+    const row4 = new ActionRowBuilder().addComponents(snsInput4);
+    const row5 = new ActionRowBuilder().addComponents(snsInput5);
+    
+    // ActionRowをModalに追加
+    modal.addComponents(row1, row2, row3, row4, row5);
+    
+    // Modalを表示
+    await interaction.showModal(modal);
+    return true;
+  },
   
   execute: async function(interaction) {
     // 特定チャンネルでのみ実行可能にする

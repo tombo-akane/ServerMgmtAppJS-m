@@ -19,7 +19,7 @@ let guideMessageId = null;
 let lastGuideUpdateTime = 0;
 
 // 案内メッセージの内容
-const GUIDE_MESSAGE = '/self コマンドで自己紹介を投稿できます。\n投稿した自己紹介を編集したいときは、/self-edit コマンドで編集できます。';
+const GUIDE_MESSAGE = '自己紹介を追加または編集するには下のボタンをクリックしてください。\nもしくは、/self（新規登録）または/self-edit（編集）コマンドを使用することもできます。';
 // 更新間隔（ミリ秒）- 短時間で複数回更新されないようにするための制限
 const UPDATE_INTERVAL = 3000; // 3秒
 
@@ -38,10 +38,10 @@ async function findExistingGuideMessage() {
     // チャンネルの最新100件のメッセージを取得
     const messages = await channel.messages.fetch({ limit: 100 });
     
-    // ボット自身のメッセージで、案内メッセージの内容と一致するものを探す
+    // ボット自身のメッセージで、案内メッセージの内容を含むものを探す
     const guideMessage = messages.find(msg => 
       msg.author.id === client.user.id && 
-      msg.content === GUIDE_MESSAGE
+      msg.content.includes('自己紹介を追加または編集するには')
     );
 
     if (guideMessage) {
@@ -88,13 +88,20 @@ async function postGuideMessage(force = false) {
       }
     }
 
-    // 新しい案内メッセージを投稿
-    const newGuideMessage = await channel.send(GUIDE_MESSAGE);
+    // 自己紹介用のボタンを作成
+    const selfButtonRow = selfFile.createSelfButtonRow();
+
+    // 新しい案内メッセージを投稿（ボタン付き）
+    const newGuideMessage = await channel.send({
+      content: GUIDE_MESSAGE,
+      components: [selfButtonRow]
+    });
+    
     guideMessageId = newGuideMessage.id;
     lastGuideUpdateTime = Date.now();
-    console.log(`Guide message posted with ID: ${guideMessageId}`);
+    console.log(`Guide message with button posted with ID: ${guideMessageId}`);
   } catch (error) {
-    console.error('Error posting guide message:', error);
+    console.error('Error posting guide message with button:', error);
   }
 }
 
@@ -116,7 +123,7 @@ const commands = {
 };
 
 // SNS共有チャネルの案内メッセージ
-const SNS_GUIDE_MESSAGE = '/sns コマンドでSNSのリンクを共有できます。\n投稿したSNSリンクを編集したいときは、/sns-edit コマンドで編集できます。';
+const SNS_GUIDE_MESSAGE = 'SNSリンクを追加または編集するには下のボタンをクリックしてください。\nもしくは、/sns（新規登録）または/sns-edit（編集）コマンドを使用することもできます。';
 // SNS共有チャネルのガイドメッセージID
 let snsGuideMessageId = null;
 // SNS共有チャネルのメッセージ更新時間
@@ -136,10 +143,10 @@ async function findExistingSnsGuideMessage() {
     // チャンネルの最新100件のメッセージを取得
     const messages = await channel.messages.fetch({ limit: 100 });
     
-    // ボット自身のメッセージで、案内メッセージの内容と一致するものを探す
+    // ボット自身のメッセージで、案内メッセージの内容を含むものを探す
     const guideMessage = messages.find(msg => 
       msg.author.id === client.user.id && 
-      msg.content === SNS_GUIDE_MESSAGE
+      msg.content.includes('SNSリンクを追加または編集するには')
     );
 
     if (guideMessage) {
@@ -185,13 +192,20 @@ async function postSnsGuideMessage(force = false) {
       }
     }
 
-    // 新しい案内メッセージを投稿
-    const newGuideMessage = await channel.send(SNS_GUIDE_MESSAGE);
+    // SNS共有用のボタンを作成
+    const snsButtonRow = snsFile.createSnsButtonRow();
+
+    // 新しい案内メッセージを投稿（ボタン付き）
+    const newGuideMessage = await channel.send({
+      content: SNS_GUIDE_MESSAGE,
+      components: [snsButtonRow]
+    });
+    
     snsGuideMessageId = newGuideMessage.id;
     lastSnsGuideUpdateTime = Date.now();
-    console.log(`SNS guide message posted with ID: ${snsGuideMessageId}`);
+    console.log(`SNS guide message with button posted with ID: ${snsGuideMessageId}`);
   } catch (error) {
-    console.error('Error posting SNS guide message:', error);
+    console.error('Error posting SNS guide message with button:', error);
   }
 }
 
@@ -206,6 +220,9 @@ client.once(Events.ClientReady, async c => {
     guideMessageId = existingMessageId;
     lastGuideUpdateTime = Date.now();
     console.log(`Using existing guide message with ID: ${guideMessageId}`);
+    
+    // 既存のメッセージを新しいフォーマット（ボタン付き）に更新
+    await postGuideMessage(true);
   } else {
     // 見つからなかった場合は新規投稿
     await postGuideMessage(true);
@@ -219,6 +236,9 @@ client.once(Events.ClientReady, async c => {
     snsGuideMessageId = existingSnsMessageId;
     lastSnsGuideUpdateTime = Date.now();
     console.log(`Using existing SNS guide message with ID: ${snsGuideMessageId}`);
+    
+    // 既存のメッセージを新しいフォーマット（ボタン付き）に更新
+    await postSnsGuideMessage(true);
   } else {
     // 見つからなかった場合は新規投稿
     await postSnsGuideMessage(true);
@@ -299,6 +319,19 @@ client.on(Events.InteractionCreate, async interaction => {
         if (command.handleModalSubmit && await command.handleModalSubmit(interaction)) {
           return;
         }
+      }
+    }
+    
+    // ボタンクリックの処理
+    if (interaction.isButton()) {
+      // 自己紹介ボタンの処理
+      if (await selfFile.handleButton(interaction)) {
+        return;
+      }
+      
+      // SNS共有ボタンの処理
+      if (await snsFile.handleButton(interaction)) {
+        return;
       }
     }
   } catch (error) {

@@ -56,6 +56,116 @@ module.exports = {
 		.setName('self')
 		.setDescription('自己紹介を作成・更新します'),
 	
+	// 自己紹介ボタンを作成する関数
+	createSelfIntroButton: function() {
+		return new ButtonBuilder()
+			.setCustomId('self_intro_button')
+			.setLabel('自己紹介を追加/編集する')
+			.setStyle(ButtonStyle.Primary);
+	},
+	
+	// ボタンコンポーネントの行を作成する関数
+	createSelfButtonRow: function() {
+		const buttonRow = new ActionRowBuilder()
+			.addComponents(this.createSelfIntroButton());
+		return buttonRow;
+	},
+	
+	// ボタンイベントを処理するハンドラ
+	handleButton: async function(interaction) {
+		if (interaction.customId !== 'self_intro_button') {
+			return false; // このボタンは処理しない
+		}
+		
+		// 特定チャンネルでのみ実行可能にする
+		if (interaction.channelId !== selfIntroductionChannelId) {
+			return await interaction.reply({ 
+				content: '自己紹介は <#' + selfIntroductionChannelId + '> チャンネルでのみ使用できます。', 
+				ephemeral: true 
+			});
+		}
+		
+		const userId = interaction.user.id;
+		const dbDir = path.join(__dirname, '..', 'db', 'self_introduction');
+		const userDataPath = path.join(dbDir, `${userId}.json`);
+		
+		// dbディレクトリが存在するか確認し、なければ作成
+		if (!fs.existsSync(dbDir)) {
+			fs.mkdirSync(dbDir, { recursive: true });
+		}
+		
+		// 既存の自己紹介があるか確認
+		const isEdit = fs.existsSync(userDataPath);
+		let userData = null;
+		
+		// Modal作成
+		const modal = new ModalBuilder()
+			.setCustomId(isEdit ? `editSelfIntroModal-${userId}` : 'selfIntroModal')
+			.setTitle(isEdit ? '自己紹介の編集' : '自己紹介フォーム');
+			
+		// フォームの各入力フィールドを作成
+		const nameInput = new TextInputBuilder()
+			.setCustomId('nameInput')
+			.setLabel('名前')
+			.setStyle(TextInputStyle.Short)
+			.setRequired(true);
+			
+		const slackNameInput = new TextInputBuilder()
+			.setCustomId('slackNameInput')
+			.setLabel('Slack名')
+			.setStyle(TextInputStyle.Short)
+			.setRequired(true);
+			
+		// コース入力フィールドを追加（バリデーションなしの自由記述）
+		const courseInput = new TextInputBuilder()
+			.setCustomId('courseInput')
+			.setLabel('コース（週1、週3、週5、個別、卒業生、ネットなど）')
+			.setStyle(TextInputStyle.Short)
+			.setPlaceholder('ご自身の所属するコースを入力してください')
+			.setRequired(true);
+		
+		const generationInput = new TextInputBuilder()
+			.setCustomId('generationInput')
+			.setLabel('所属期（例: N1, S2, R3など）')
+			.setStyle(TextInputStyle.Short)
+			.setPlaceholder('N, S, Rのいずれかと数字の組み合わせ')
+			.setRequired(true);
+			
+		const messageInput = new TextInputBuilder()
+			.setCustomId('messageInput')
+			.setLabel('ひとこと')
+			.setStyle(TextInputStyle.Paragraph)
+			.setRequired(true);
+		
+		// 既存データがあれば読み込んで初期値をセット
+		if (isEdit) {
+			try {
+				userData = JSON.parse(fs.readFileSync(userDataPath, 'utf8'));
+				nameInput.setValue(userData.name || '');
+				slackNameInput.setValue(userData.slackName || '');
+				courseInput.setValue(userData.course || '');
+				generationInput.setValue(userData.generation || '');
+				messageInput.setValue(userData.message || '');
+			} catch (error) {
+				console.error(`Error reading user data for ${userId}:`, error);
+			}
+		}
+			
+		// 各フィールドをActionRowに配置
+		const nameRow = new ActionRowBuilder().addComponents(nameInput);
+		const slackRow = new ActionRowBuilder().addComponents(slackNameInput);
+		const courseRow = new ActionRowBuilder().addComponents(courseInput);
+		const genRow = new ActionRowBuilder().addComponents(generationInput);
+		const msgRow = new ActionRowBuilder().addComponents(messageInput);
+		
+		// ActionRowをModalに追加
+		modal.addComponents(nameRow, slackRow, courseRow, genRow, msgRow);
+		
+		// Modalを表示
+		await interaction.showModal(modal);
+		return true;
+	},
+	
 	execute: async function(interaction) {
 		// 特定チャンネルでのみ実行可能にする
 		if (interaction.channelId !== selfIntroductionChannelId) {
